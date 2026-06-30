@@ -19,8 +19,8 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh """
-                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
+                    docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                    docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
                 """
             }
         }
@@ -33,7 +33,7 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     sh '''
-                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
                     '''
                 }
             }
@@ -42,79 +42,101 @@ pipeline {
         stage('Push Docker Image') {
             steps {
                 sh """
-                docker push ${IMAGE_NAME}:${IMAGE_TAG}
-                docker push ${IMAGE_NAME}:latest
+                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                    docker push ${IMAGE_NAME}:latest
                 """
             }
         }
 
-        stage('Configure AWS Credentials') {
+        stage('Verify AWS Identity') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-creds'
-                ]]) {
-                    sh 'aws sts get-caller-identity'
-                }
+                sh '''
+                    echo "===== AWS Identity ====="
+                    aws sts get-caller-identity
+                '''
             }
         }
 
         stage('Update kubeconfig') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-creds'
-                ]]) {
-                    sh """
+                sh """
                     aws eks update-kubeconfig \
                         --region ${AWS_REGION} \
                         --name ${EKS_CLUSTER}
-                    """
-                }
+                """
+            }
+        }
+
+        stage('Verify Cluster Access') {
+            steps {
+                sh '''
+                    echo "===== Current Context ====="
+                    kubectl config current-context
+
+                    echo "===== Kubectl Version ====="
+                    kubectl version --client
+
+                    echo "===== Cluster Nodes ====="
+                    kubectl get nodes
+                '''
             }
         }
 
         stage('Update Deployment Image') {
             steps {
                 sh """
-                sed -i 's|image:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g' deployment.yml
-                cat deployment.yml
+                    sed -i 's|image:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g' deployment.yml
+
+                    echo "===== Updated deployment.yml ====="
+
+                    cat deployment.yml
                 """
             }
         }
 
         stage('Deploy to EKS') {
             steps {
-                sh """
-                kubectl apply -f deployment.yml
-                kubectl apply -f service.yml
-                """
+                sh '''
+                    kubectl apply -f deployment.yml
+                    kubectl apply -f service.yml
+                '''
             }
         }
 
         stage('Verify Deployment') {
             steps {
-                sh """
-                kubectl get nodes
-                kubectl get pods
-                kubectl get svc
-                kubectl rollout status deployment/trendapp
-                """
+                sh '''
+                    echo "===== Pods ====="
+                    kubectl get pods -o wide
+
+                    echo "===== Services ====="
+                    kubectl get svc
+
+                    echo "===== Deployments ====="
+                    kubectl get deployments
+
+                    kubectl rollout status deployment/trend-app
+                '''
             }
         }
     }
 
     post {
-        always {
-            cleanWs()
-        }
 
         success {
+            echo "=================================="
             echo "Deployment Successful"
+            echo "=================================="
         }
 
         failure {
+            echo "=================================="
             echo "Deployment Failed"
+            echo "=================================="
+        }
+
+        always {
+            cleanWs()
         }
     }
 }
