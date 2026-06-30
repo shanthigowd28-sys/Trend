@@ -1,4 +1,3 @@
-```groovy
 pipeline {
     agent any
 
@@ -7,7 +6,7 @@ pipeline {
         IMAGE_TAG = "${BUILD_NUMBER}"
         AWS_REGION = "ap-south-1"
         EKS_CLUSTER = "trend-cluster"
-    }  
+    }
 
     stages {
 
@@ -19,7 +18,10 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t $IMAGE_NAME:$IMAGE_TAG .'
+                sh """
+                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
+                """
             }
         }
 
@@ -31,7 +33,7 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     sh '''
-                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
                     '''
                 }
             }
@@ -39,11 +41,10 @@ pipeline {
 
         stage('Push Docker Image') {
             steps {
-                sh '''
-                docker push $IMAGE_NAME:$IMAGE_TAG
-                docker tag $IMAGE_NAME:$IMAGE_TAG $IMAGE_NAME:latest
-                docker push $IMAGE_NAME:latest
-                '''
+                sh """
+                docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                docker push ${IMAGE_NAME}:latest
+                """
             }
         }
 
@@ -53,9 +54,7 @@ pipeline {
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-creds'
                 ]]) {
-                    sh '''
-                    aws sts get-caller-identity
-                    '''
+                    sh 'aws sts get-caller-identity'
                 }
             }
         }
@@ -66,33 +65,43 @@ pipeline {
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-creds'
                 ]]) {
-                    sh '''
+                    sh """
                     aws eks update-kubeconfig \
-                    --region $AWS_REGION \
-                    --name $EKS_CLUSTER
-                    '''
+                        --region ${AWS_REGION} \
+                        --name ${EKS_CLUSTER}
+                    """
                 }
+            }
+        }
+
+        stage('Update Deployment Image') {
+            steps {
+                sh """
+                sed -i 's|image:.*|image: ${IMAGE_NAME}:${IMAGE_TAG}|g' deployment.yml
+                cat deployment.yml
+                """
             }
         }
 
         stage('Deploy to EKS') {
             steps {
-                sh '''
+                sh """
                 kubectl apply -f deployment.yml
                 kubectl apply -f service.yml
-                '''
+                """
             }
         }
 
         stage('Verify Deployment') {
             steps {
-                sh '''
+                sh """
+                kubectl get nodes
                 kubectl get pods
                 kubectl get svc
-                '''
+                kubectl rollout status deployment/trendapp
+                """
             }
         }
-
     }
 
     post {
@@ -109,4 +118,3 @@ pipeline {
         }
     }
 }
-```
