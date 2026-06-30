@@ -7,7 +7,7 @@ pipeline {
         IMAGE_TAG = "${BUILD_NUMBER}"
         AWS_REGION = "ap-south-1"
         EKS_CLUSTER = "trend-cluster"
-    }
+    }  
 
     stages {
 
