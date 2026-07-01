@@ -5,7 +5,7 @@ pipeline {
         IMAGE_NAME = "shanthigowd/trendapp"
         IMAGE_TAG = "${BUILD_NUMBER}"
         AWS_REGION = "ap-south-1"
-        EKS_CLUSTER = "trend-app-cluster"
+        EKS_CLUSTER = "trend-project"
     }
 
     stages {
