@@ -6,10 +6,8 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
-
 spec:
   ingressClassName: alb
-
   rules:
     - http:
         paths:
